@@ -30,27 +30,32 @@ const (
 	ESIndex = "heapster"
 )
 
-// SaveDataFunc is a pluggable function to enforce limits on the object
-type SaveDataFunc func(esClient *elastic.Client, indexName string, typeName string, sinkData interface{}) error
+type ElasticSearchService struct {
+	EsClient   *elastic.Client
+	bulkProcessor *elastic.BulkProcessor
+	base_index string
+}
 
-type ElasticSearchConfig struct {
-	EsClient *elastic.Client
-	Index    string
+func (esConfig ElasticSearchService) Index(date time.Time) string {
+	return date.Format(fmt.Sprintf("%s-2006.01.02", esConfig.base_index))
 }
 
 // SaveDataIntoES save metrics and events to ES by using ES client
-func SaveDataIntoES(esClient *elastic.Client, indexName string, typeName string, sinkData interface{}) error {
-	if indexName == "" || typeName == "" || sinkData == nil {
+func (esSvc *ElasticSearchService) SaveData(date time.Time, typeName string, sinkData []interface{}) error {
+	if typeName == "" || len(sinkData) == 0 {
 		return nil
 	}
+
+	indexName := esSvc.Index(date)
+
 	// Use the IndexExists service to check if a specified index exists.
-	exists, err := esClient.IndexExists(indexName).Do()
+	exists, err := esSvc.EsClient.IndexExists(indexName).Do()
 	if err != nil {
 		return err
 	}
 	if !exists {
 		// Create a new index.
-		createIndex, err := esClient.CreateIndex(indexName).BodyString(mapping).Do()
+		createIndex, err := esSvc.EsClient.CreateIndex(indexName).BodyString(mapping).Do()
 		if err != nil {
 			return err
 		}
@@ -58,33 +63,36 @@ func SaveDataIntoES(esClient *elastic.Client, indexName string, typeName string,
 			return fmt.Errorf("Failed to create Index in ES cluster: %s", err)
 		}
 	}
-	indexID := uuid.NewUUID()
-	_, err = esClient.Index().
-		Index(indexName).
-		Type(typeName).
-		Id(indexID.String()).
-		BodyJson(sinkData).
-		Do()
-	if err != nil {
-		return err
+
+
+
+	for _, data := range sinkData {
+		indexID := uuid.NewUUID()
+		req := elastic.NewBulkIndexRequest().
+			Index(indexName).
+			Type(typeName).
+			Id(indexID.String()).
+			Doc(data)
+		esSvc.bulkProcessor.Add(req)
 	}
+
 	return nil
 }
 
 // CreateElasticSearchConfig creates an ElasticSearch configuration struct
 // which contains an ElasticSearch client for later use
-func CreateElasticSearchConfig(uri *url.URL) (*ElasticSearchConfig, error) {
+func CreateElasticSearchService(uri *url.URL) (*ElasticSearchService, error) {
 
-	var esConfig ElasticSearchConfig
+	var esSvc ElasticSearchService
 	opts, err := url.ParseQuery(uri.RawQuery)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to parser url's query string: %s", err)
 	}
 
 	// set the index for es,the default value is "heapster"
-	esConfig.Index = ESIndex
+	esSvc.base_index = ESIndex
 	if len(opts["index"]) > 0 {
-		esConfig.Index = opts["index"][0]
+		esSvc.base_index = opts["index"][0]
 	}
 
 	// Set the URL endpoints of the ES's nodes. Notice that when sniffing is
@@ -148,12 +156,24 @@ func CreateElasticSearchConfig(uri *url.URL) (*ElasticSearchConfig, error) {
 		}
 	}
 
-	esConfig.EsClient, err = elastic.NewClient(startupFns...)
+	esSvc.EsClient, err = elastic.NewClient(startupFns...)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create ElasticSearch client: %v", err)
 	}
 
+	bulkWorkers := 5
+	if len(opts["bulkWorkers"]) > 0 {
+		bulkWorkers, err = strconv.Atoi(opts["bulkWorkers"][0])
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse URL's bulkWorkers value into an int")
+		}
+	}
+	esSvc.bulkProcessor, err = esSvc.EsClient.BulkProcessor().Name("ElasticSearchWorker").Workers(bulkWorkers).Do()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to an ElasticSearch Bulk Processor: %v", err)
+	}
+
 	glog.V(2).Infof("ElasticSearch sink configure successfully")
 
-	return &esConfig, nil
+	return &esSvc, nil
 }

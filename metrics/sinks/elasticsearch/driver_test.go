@@ -26,34 +26,38 @@ import (
 	"k8s.io/heapster/metrics/core"
 )
 
-type dataSavedToES struct {
-	data string
-}
 
 type fakeESSink struct {
 	core.DataSink
-	savedData []dataSavedToES
+	savedData map[string][]string
 }
 
 var FakeESSink fakeESSink
 
-func SaveDataIntoES_Stub(esClient *elastic.Client, indexName string, typeName string, sinkData interface{}) error {
-	jsonItems, err := json.Marshal(sinkData)
-	if err != nil {
-		return fmt.Errorf("failed to transform the items to json : %s", err)
+func SaveDataIntoES_Stub(date time.Time, typeName string, sinkData []interface{}) error {
+	for _, data := range sinkData {
+		jsonItems, err := json.Marshal(data)
+		if err != nil {
+			return fmt.Errorf("failed to transform the items to json : %s", err)
+		}
+
+
+		if FakeESSink.savedData[typeName] == nil {
+			FakeESSink.savedData[typeName] = []string{}
+		}
+
+		FakeESSink.savedData[typeName] = append(FakeESSink.savedData[typeName], string(jsonItems))
 	}
-	FakeESSink.savedData = append(FakeESSink.savedData, dataSavedToES{string(jsonItems)})
 	return nil
 }
 
 // Returns a fake ES sink.
 func NewFakeSink() fakeESSink {
-	savedData := make([]dataSavedToES, 0)
+	savedData := make(map[string][]string)
 	return fakeESSink{
 		&elasticSearchSink{
-			saveDataFunc: SaveDataIntoES_Stub,
-			esConfig: esCommon.ElasticSearchConfig{
-				Index:    "heapster-metric-index",
+			saveData: SaveDataIntoES_Stub,
+			esSvc: esCommon.ElasticSearchService{
 				EsClient: &elastic.Client{},
 			},
 		},
@@ -62,14 +66,13 @@ func NewFakeSink() fakeESSink {
 }
 
 func TestStoreDataEmptyInput(t *testing.T) {
-	fakeSink := NewFakeSink()
+	FakeESSink := NewFakeSink()
 	dataBatch := core.DataBatch{}
-	fakeSink.ExportData(&dataBatch)
-	assert.Equal(t, 0, len(fakeSink.savedData))
+	FakeESSink.ExportData(&dataBatch)
+	assert.Equal(t, 0, len(FakeESSink.savedData))
 }
 
 func TestStoreMultipleDataInput(t *testing.T) {
-	fakeSink := NewFakeSink()
 	timestamp := time.Now()
 
 	l := make(map[string]string)
@@ -149,6 +152,17 @@ func TestStoreMultipleDataInput(t *testing.T) {
 		},
 	}
 
+	metricSet6 := core.MetricSet{
+		Labels: l,
+		MetricValues: map[string]core.MetricValue{
+			"cpu/limit": {
+				ValueType:  core.ValueInt64,
+				MetricType: core.MetricCumulative,
+				IntValue:   123456,
+			},
+		},
+	}
+
 	data := core.DataBatch{
 		Timestamp: timestamp,
 		MetricSets: map[string]*core.MetricSet{
@@ -157,31 +171,39 @@ func TestStoreMultipleDataInput(t *testing.T) {
 			"pod3": &metricSet3,
 			"pod4": &metricSet4,
 			"pod5": &metricSet5,
+			"pod6": &metricSet6,
 		},
 	}
 
 	timeStr, err := timestamp.UTC().MarshalJSON()
 	assert.NoError(t, err)
 
-	fakeSink.ExportData(&data)
+	FakeESSink = NewFakeSink()
+	FakeESSink.ExportData(&data)
 
 	//expect msg string
-	assert.Equal(t, 5, len(FakeESSink.savedData))
+	assert.Equal(t, 2, len(FakeESSink.savedData))
 
-	var expectMsgTemplate = [5]string{
-		`{"MetricsName":"/system.slice/-.mount//cpu/limit","MetricsValue":{"value":123456},"MetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/-.mount","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"}}`,
-		`{"MetricsName":"/system.slice/dbus.service//cpu/usage","MetricsValue":{"value":123456},"MetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/dbus.service","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"}}`,
-		`{"MetricsName":"test/metric/1","MetricsValue":{"value":123456},"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"}}`,
-		`{"MetricsName":"test/metric/1","MetricsValue":{"value":123456},"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"","pod_id":"aaaa-bbbb-cccc-dddd"}}`,
-		`{"MetricsName":"removeme","MetricsValue":{"value":123456},"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"}}`,
+	var expectMsgTemplate = [6]string{
+		`{"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"test/metric/1","MetricsValue":{"value":123456}}`,
+		`{"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"removeme","MetricsValue":{"value":123456}}`,
+		`{"MetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/-.mount","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"/system.slice/-.mount//cpu/limit","MetricsValue":{"value":123456}}`,
+		`{"MetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/dbus.service","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"/system.slice/dbus.service//cpu/usage","MetricsValue":{"value":123456}}`,
+		`{"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"test/metric/1","MetricsValue":{"value":123456}}`,
+		`{"MetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/-.mount","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"Metrics":{"cpu/limit":123456}}`,
 	}
 
 	msgsString := fmt.Sprintf("%s", FakeESSink.savedData)
+	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][0])
+	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][1])
+	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][2])
+	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][3])
+	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][4])
 
 	for _, mgsTemplate := range expectMsgTemplate {
 		expectMsg := fmt.Sprintf(mgsTemplate, timeStr)
 		assert.Contains(t, msgsString, expectMsg)
 	}
 
-	FakeESSink = fakeESSink{}
+	FakeESSink = NewFakeSink()
 }

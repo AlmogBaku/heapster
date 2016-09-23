@@ -20,48 +20,46 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"gopkg.in/olivere/elastic.v3"
 	esCommon "k8s.io/heapster/common/elasticsearch"
 	"k8s.io/heapster/metrics/core"
-)
-
-const (
-	typeName = "k8s-heapster"
+	"reflect"
 )
 
 // SaveDataFunc is a pluggable function to enforce limits on the object
-type SaveDataFunc func(esClient *elastic.Client, indexName string, typeName string, sinkData interface{}) error
+type SaveDataFunc func(date time.Time, typeName string, sinkData []interface{}) error
 
 type elasticSearchSink struct {
-	saveDataFunc SaveDataFunc
-	esConfig     esCommon.ElasticSearchConfig
+	esSvc    esCommon.ElasticSearchService
+	saveData SaveDataFunc
 	sync.RWMutex
 }
 
+type EsFamilyPoints map[core.MetricFamily][]interface{}
+type esPointTags map[string]string
+
 type EsSinkPoint struct {
-	MetricsName      string
-	MetricsValue     interface{}
 	MetricsTimestamp time.Time
-	MetricsTags      map[string]string
+	MetricsTags     esPointTags
+}
+type EsSinkPointGeneral struct {
+	EsSinkPoint
+	MetricsName  string
+	MetricsValue interface{}
+}
+type EsSinkPointFamily struct {
+	EsSinkPoint
+	Metrics map[string]interface{}
 }
 
 func (sink *elasticSearchSink) ExportData(dataBatch *core.DataBatch) {
 	sink.Lock()
 	defer sink.Unlock()
+
 	for _, metricSet := range dataBatch.MetricSets {
+		familyPoints := EsFamilyPoints{}
+
 		for metricName, metricValue := range metricSet.MetricValues {
-			point := EsSinkPoint{
-				MetricsName: metricName,
-				MetricsTags: metricSet.Labels,
-				MetricsValue: map[string]interface{}{
-					"value": metricValue.GetValue(),
-				},
-				MetricsTimestamp: dataBatch.Timestamp.UTC(),
-			}
-			err := sink.saveDataFunc(sink.esConfig.EsClient, sink.esConfig.Index, typeName, point)
-			if err != nil {
-				glog.Warningf("Failed to export data to ElasticSearch sink: %v", err)
-			}
+			familyPoints = addMetric(familyPoints, metricName, dataBatch.Timestamp, metricSet.Labels, metricValue.GetValue())
 		}
 		for _, metric := range metricSet.LabeledMetrics {
 			labels := make(map[string]string)
@@ -71,20 +69,58 @@ func (sink *elasticSearchSink) ExportData(dataBatch *core.DataBatch) {
 			for k, v := range metric.Labels {
 				labels[k] = v
 			}
-			point := EsSinkPoint{
-				MetricsName: metric.Name,
-				MetricsTags: labels,
-				MetricsValue: map[string]interface{}{
-					"value": metric.GetValue(),
-				},
-				MetricsTimestamp: dataBatch.Timestamp.UTC(),
-			}
-			err := sink.saveDataFunc(sink.esConfig.EsClient, sink.esConfig.Index, typeName, point)
+
+			familyPoints = addMetric(familyPoints, metric.Name, dataBatch.Timestamp, labels, metric.GetValue())
+		}
+
+		for family, dataPoints := range familyPoints {
+			err := sink.saveData(dataBatch.Timestamp.UTC(), string(family), dataPoints)
 			if err != nil {
 				glog.Warningf("Failed to export data to ElasticSearch sink: %v", err)
 			}
 		}
 	}
+}
+
+func addMetric(points EsFamilyPoints, metricName string, date time.Time, tags esPointTags, value interface{}) EsFamilyPoints {
+	family := core.MetricFamilyForName(metricName)
+
+	if points[family] == nil {
+		points[family] = []interface{}{}
+	}
+
+	if family == core.MetricFamilyGeneral {
+		point := EsSinkPointGeneral{}
+		point.MetricsTags = tags
+		point.MetricsTimestamp = date.UTC()
+		point.MetricsName = metricName
+		point.MetricsValue = map[string]interface{}{
+			"value": value,
+		}
+		//add
+		points[family] = append(points[family], point)
+		return points
+	}
+
+	for idx, pt := range points[family] {
+		if point, ok := pt.(EsSinkPointFamily); ok {
+			if point.MetricsTimestamp == date.UTC() && reflect.DeepEqual(point.MetricsTags, tags){
+				point.Metrics[metricName] = value
+				points[family][idx] = point
+				return points
+			}
+		}
+	}
+
+	point := EsSinkPointFamily{}
+	point.MetricsTimestamp = date.UTC()
+	point.MetricsTags = tags
+	point.Metrics = make(map[string]interface{})
+	point.Metrics[metricName] = value
+	//add
+	points[family] = append(points[family], point)
+
+	return points
 }
 
 func (sink *elasticSearchSink) Name() string {
@@ -97,14 +133,16 @@ func (sink *elasticSearchSink) Stop() {
 
 func NewElasticSearchSink(uri *url.URL) (core.DataSink, error) {
 	var esSink elasticSearchSink
-	elasticsearchConfig, err := esCommon.CreateElasticSearchConfig(uri)
+	esSvc, err := esCommon.CreateElasticSearchService(uri)
 	if err != nil {
 		glog.Warningf("Failed to config ElasticSearch: %v", err)
 		return nil, err
 	}
 
-	esSink.esConfig = *elasticsearchConfig
-	esSink.saveDataFunc = esCommon.SaveDataIntoES
+	esSink.esSvc = *esSvc
+	esSink.saveData = func(date time.Time, typeName string, sinkData []interface{}) error {
+		return esSvc.SaveData(date, typeName, sinkData)
+	}
 	glog.V(2).Info("ElasticSearch sink setup successfully")
 	return &esSink, nil
 }

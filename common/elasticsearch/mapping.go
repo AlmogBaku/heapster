@@ -13,27 +13,26 @@
 // limitations under the License.
 package elasticsearch
 
-import "strings"
+import (
+	"strings"
+	"k8s.io/heapster/metrics/core"
+)
 
-func metricTypeSchema(typeName string, metrics ...string) string {
+func metricFamilySchema(metricFamily core.MetricFamily) string {
 	metricSchemas := []string{}
-	for _, metricName := range metrics {
+	for _, metric := range core.MetricFamilies[metricFamily] {
 		metricSchemas = append(metricSchemas,
-			`"`+metricName+`": {
+`"`+metric.Name+`": {
   "properties": {
-    "MetricsValue": {
-      "properties": {
-        "value": {
-  	"type": "long"
-        }
-      }
+    "value": {
+      "type": "long"
     }
   }
 }`,
 		)
 	}
 
-	return customMetricTypeSchema(typeName,
+	return customMetricTypeSchema(string(metricFamily),
 		`"Metrics": {
   "properties": {
   `+strings.Join(metricSchemas, ",\r\n")+`
@@ -156,19 +155,12 @@ var mapping = `{
     "heapster-events": {}
   },
   "mappings": {
-    ` + metricTypeSchema("cpu",
-	"limit", "node_capacity", "node_reservation", "node_utilization", "request", "usage", "usage_rate",
-) + `,
-    ` + metricTypeSchema("filesystem", "usage", "limit", "available") + `,
-    ` + metricTypeSchema("memory",
-	"limit", "major_page_faults", "major_page_faults_rate", "node_capacity", "node_reservation",
-	"node_utilization", "page_faults", "page_faults_rate", "request", "uasge", "working_set",
-) + `,
-    ` + metricTypeSchema("network",
-	"rx", "rx_errors", "rx_errors_rate", "rx_rate", "tx", "tx_errors", "tx_errors_rate", "tx_rate",
-) + `,
-    ` + metricTypeSchema("general",
-	`"MetricsName": {
+    ` + metricFamilySchema(core.MetricFamilyCpu) + `,
+    ` + metricFamilySchema(core.MetricFamilyFilesystem) + `,
+    ` + metricFamilySchema(core.MetricFamilyMemory) + `,
+    ` + metricFamilySchema(core.MetricFamilyNetwork) + `,
+    ` + customMetricTypeSchema(core.MetricFamilyGeneral,
+`"MetricsName": {
   "type": "string",
   "index": "analyzed",
   "fields": {

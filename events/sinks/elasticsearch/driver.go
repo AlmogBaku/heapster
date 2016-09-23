@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 
 	"github.com/golang/glog"
-	"gopkg.in/olivere/elastic.v3"
 	esCommon "k8s.io/heapster/common/elasticsearch"
 	event_core "k8s.io/heapster/events/core"
 	"k8s.io/heapster/metrics/core"
@@ -33,12 +32,12 @@ const (
 	typeName = "events"
 )
 
-// LimitFunc is a pluggable function to enforce limits on the object
-type SaveDataFunc func(esClient *elastic.Client, indexName string, typeName string, sinkData interface{}) error
+// SaveDataFunc is a pluggable function to enforce limits on the object
+type SaveDataFunc func(date time.Time, typeName string, sinkData []interface{}) error
 
 type elasticSearchSink struct {
-	saveDataFunc SaveDataFunc
-	esConfig     esCommon.ElasticSearchConfig
+	esSvc        esCommon.ElasticSearchService
+	saveData SaveDataFunc
 	sync.RWMutex
 }
 
@@ -86,7 +85,7 @@ func (sink *elasticSearchSink) ExportEvents(eventBatch *event_core.EventBatch) {
 		if err != nil {
 			glog.Warningf("Failed to convert event to point: %v", err)
 		}
-		err = sink.saveDataFunc(sink.esConfig.EsClient, sink.esConfig.Index, typeName, point)
+		err = sink.saveData(point.EventTimestamp, typeName, []interface{}{*point})
 		if err != nil {
 			glog.Warningf("Failed to export data to ElasticSearch sink: %v", err)
 		}
@@ -103,14 +102,16 @@ func (sink *elasticSearchSink) Stop() {
 
 func NewElasticSearchSink(uri *url.URL) (event_core.EventSink, error) {
 	var esSink elasticSearchSink
-	elasticsearchConfig, err := esCommon.CreateElasticSearchConfig(uri)
+	esSvc, err := esCommon.CreateElasticSearchService(uri)
 	if err != nil {
 		glog.Warning("Failed to config ElasticSearch")
 		return nil, err
 	}
 
-	esSink.esConfig = *elasticsearchConfig
-	esSink.saveDataFunc = esCommon.SaveDataIntoES
+	esSink.esSvc = *esSvc
+	esSink.saveData = func(date time.Time, typeName string, sinkData []interface{}) error {
+		return esSvc.SaveData(date, typeName, sinkData)
+	}
 	glog.V(2).Info("ElasticSearch sink setup successfully")
 	return &esSink, nil
 }
