@@ -168,12 +168,12 @@ var mapping = `{
       "type": "string",
       "index": "not_analyzed"
     }
-  },
-  "MetricsValue": {
-    "properties": {
-      "value": {
-        "type": "long"
-      }
+  }
+},
+"MetricsValue": {
+  "properties": {
+    "value": {
+      "type": "long"
     }
   }
 }`) + `,
