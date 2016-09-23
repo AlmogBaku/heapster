@@ -33,7 +33,7 @@ const (
 )
 
 // SaveDataFunc is a pluggable function to enforce limits on the object
-type SaveDataFunc func(date time.Time, typeName string, sinkData []interface{}) error
+type SaveDataFunc func(date time.Time, sinkData []interface{}) error
 
 type elasticSearchSink struct {
 	esSvc    esCommon.ElasticSearchService
@@ -85,7 +85,7 @@ func (sink *elasticSearchSink) ExportEvents(eventBatch *event_core.EventBatch) {
 		if err != nil {
 			glog.Warningf("Failed to convert event to point: %v", err)
 		}
-		err = sink.saveData(point.EventTimestamp, typeName, []interface{}{*point})
+		err = sink.saveData(point.EventTimestamp, []interface{}{*point})
 		if err != nil {
 			glog.Warningf("Failed to export data to ElasticSearch sink: %v", err)
 		}
@@ -109,7 +109,7 @@ func NewElasticSearchSink(uri *url.URL) (event_core.EventSink, error) {
 	}
 
 	esSink.esSvc = *esSvc
-	esSink.saveData = func(date time.Time, typeName string, sinkData []interface{}) error {
+	esSink.saveData = func(date time.Time, sinkData []interface{}) error {
 		return esSvc.SaveData(date, typeName, sinkData)
 	}
 	glog.V(2).Info("ElasticSearch sink setup successfully")

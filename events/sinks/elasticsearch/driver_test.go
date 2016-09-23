@@ -39,7 +39,7 @@ type fakeESSink struct {
 
 var FakeESSink fakeESSink
 
-func SaveDataIntoES_Stub(date time.Time, typeName string, sinkData []interface{}) error {
+func SaveDataIntoES_Stub(date time.Time, sinkData []interface{}) error {
 	for _, data := range sinkData {
 		jsonItems, err := json.Marshal(data)
 		if err != nil {
