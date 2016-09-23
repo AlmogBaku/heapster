@@ -14,18 +14,18 @@
 package elasticsearch
 
 import (
-	"strings"
 	"k8s.io/heapster/metrics/core"
+	"strings"
 )
 
 func MetricFamilyTimestamp(metricFamily core.MetricFamily) string {
-	return strings.Title(string(metricFamily))+"MetricsTimestamp"
+	return strings.Title(string(metricFamily)) + "MetricsTimestamp"
 }
 func metricFamilySchema(metricFamily core.MetricFamily) string {
 	metricSchemas := []string{}
 	for _, metric := range core.MetricFamilies[metricFamily] {
 		metricSchemas = append(metricSchemas,
-`"`+metric.Name+`": {
+			`"`+metric.Name+`": {
   "properties": {
     "value": {
       "type": "long"
@@ -36,7 +36,7 @@ func metricFamilySchema(metricFamily core.MetricFamily) string {
 	}
 
 	return customMetricTypeSchema(string(metricFamily),
-`"`+MetricFamilyTimestamp(metricFamily)+`": {
+		`"`+MetricFamilyTimestamp(metricFamily)+`": {
   "type": "date",
   "format": "strict_date_optional_time||epoch_millis"
 },
@@ -156,7 +156,7 @@ var mapping = `{
     ` + metricFamilySchema(core.MetricFamilyMemory) + `,
     ` + metricFamilySchema(core.MetricFamilyNetwork) + `,
     ` + customMetricTypeSchema(core.MetricFamilyGeneral,
-`"MetricsName": {
+	`"MetricsName": {
   "type": "string",
   "index": "analyzed",
   "fields": {

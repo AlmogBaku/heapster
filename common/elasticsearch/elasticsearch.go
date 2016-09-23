@@ -31,9 +31,9 @@ const (
 )
 
 type ElasticSearchService struct {
-	EsClient   *elastic.Client
+	EsClient      *elastic.Client
 	bulkProcessor *elastic.BulkProcessor
-	base_index string
+	base_index    string
 }
 
 func (esConfig ElasticSearchService) Index(date time.Time) string {

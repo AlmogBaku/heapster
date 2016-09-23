@@ -36,7 +36,7 @@ const (
 type SaveDataFunc func(date time.Time, typeName string, sinkData []interface{}) error
 
 type elasticSearchSink struct {
-	esSvc        esCommon.ElasticSearchService
+	esSvc    esCommon.ElasticSearchService
 	saveData SaveDataFunc
 	sync.RWMutex
 }

@@ -80,7 +80,7 @@ var NodeAutoscalingMetrics = []Metric{
 	MetricNodeMemoryReservation,
 }
 
-var CpuMetrics = []Metric {
+var CpuMetrics = []Metric{
 	MetricCpuLimit,
 	MetricCpuRequest,
 	MetricCpuUsage,
@@ -90,12 +90,12 @@ var CpuMetrics = []Metric {
 	MetricNodeCpuReservation,
 	MetricNodeCpuUtilization,
 }
-var FilesystemMetrics = []Metric {
+var FilesystemMetrics = []Metric{
 	MetricFilesystemAvailable,
 	MetricFilesystemLimit,
 	MetricFilesystemUsage,
 }
-var MemoryMetrics = []Metric {
+var MemoryMetrics = []Metric{
 	MetricMemoryLimit,
 	MetricMemoryMajorPageFaults,
 	MetricMemoryMajorPageFaultsRate,
@@ -109,7 +109,7 @@ var MemoryMetrics = []Metric {
 	MetricNodeMemoryUtilization,
 	MetricNodeMemoryReservation,
 }
-var NetworkMetrics = []Metric {
+var NetworkMetrics = []Metric{
 	MetricNetworkRx,
 	MetricNetworkRxErrors,
 	MetricNetworkRxErrorsRate,
@@ -121,18 +121,20 @@ var NetworkMetrics = []Metric {
 }
 
 type MetricFamily string
+
 const (
-	MetricFamilyCpu MetricFamily = "cpu"
-	MetricFamilyFilesystem = "filesystem"
-	MetricFamilyMemory = "memory"
-	MetricFamilyNetwork = "network"
-	MetricFamilyGeneral = "general"
+	MetricFamilyCpu        MetricFamily = "cpu"
+	MetricFamilyFilesystem              = "filesystem"
+	MetricFamilyMemory                  = "memory"
+	MetricFamilyNetwork                 = "network"
+	MetricFamilyGeneral                 = "general"
 )
+
 var MetricFamilies = map[MetricFamily][]Metric{
-	MetricFamilyCpu: CpuMetrics,
+	MetricFamilyCpu:        CpuMetrics,
 	MetricFamilyFilesystem: FilesystemMetrics,
-	MetricFamilyMemory: MemoryMetrics,
-	MetricFamilyNetwork: NetworkMetrics,
+	MetricFamilyMemory:     MemoryMetrics,
+	MetricFamilyNetwork:    NetworkMetrics,
 }
 
 func MetricFamilyForName(metricName string) MetricFamily {

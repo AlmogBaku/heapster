@@ -26,7 +26,6 @@ import (
 	"k8s.io/heapster/metrics/core"
 )
 
-
 type fakeESSink struct {
 	core.DataSink
 	savedData map[string][]string
@@ -40,7 +39,6 @@ func SaveDataIntoES_Stub(date time.Time, typeName string, sinkData []interface{}
 		if err != nil {
 			return fmt.Errorf("failed to transform the items to json : %s", err)
 		}
-
 
 		if FakeESSink.savedData[typeName] == nil {
 			FakeESSink.savedData[typeName] = []string{}
