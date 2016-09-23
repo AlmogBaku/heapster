@@ -65,7 +65,14 @@ func (esSvc *ElasticSearchService) SaveData(date time.Time, typeName string, sin
 		if !createIndex.Acknowledged {
 			return fmt.Errorf("Failed to create Index in ES cluster: %s", err)
 		}
+	}
 
+	aliases, err := esSvc.EsClient.Aliases().Index(indexName).Do()
+	if err != nil {
+		return err
+	}
+	aliasName := esSvc.IndexAlias(date, typeName)
+	if !aliases.Indices[indexName].HasAlias(aliasName) {
 		createAlias, err := esSvc.EsClient.Alias().Add(indexName, esSvc.IndexAlias(date, typeName)).Do()
 		if err != nil {
 			return err
@@ -74,8 +81,6 @@ func (esSvc *ElasticSearchService) SaveData(date time.Time, typeName string, sin
 			return fmt.Errorf("Failed to create Index Alias in ES cluster: %s", err)
 		}
 	}
-
-
 
 	for _, data := range sinkData {
 		indexID := uuid.NewUUID()
