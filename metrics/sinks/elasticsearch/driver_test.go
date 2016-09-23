@@ -155,10 +155,15 @@ func TestStoreMultipleDataInput(t *testing.T) {
 	metricSet6 := core.MetricSet{
 		Labels: l,
 		MetricValues: map[string]core.MetricValue{
-			"cpu/limit": {
+			"cpu/usage": {
 				ValueType:  core.ValueInt64,
 				MetricType: core.MetricCumulative,
 				IntValue:   123456,
+			},
+			"cpu/limit": {
+				ValueType:  core.ValueInt64,
+				MetricType: core.MetricCumulative,
+				IntValue:   223456,
 			},
 		},
 	}
@@ -185,20 +190,15 @@ func TestStoreMultipleDataInput(t *testing.T) {
 	assert.Equal(t, 2, len(FakeESSink.savedData))
 
 	var expectMsgTemplate = [6]string{
-		`{"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"test/metric/1","MetricsValue":{"value":123456}}`,
-		`{"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"removeme","MetricsValue":{"value":123456}}`,
-		`{"MetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/-.mount","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"/system.slice/-.mount//cpu/limit","MetricsValue":{"value":123456}}`,
-		`{"MetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/dbus.service","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"/system.slice/dbus.service//cpu/usage","MetricsValue":{"value":123456}}`,
-		`{"MetricsTimestamp":%s,"MetricsTags":{"namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"test/metric/1","MetricsValue":{"value":123456}}`,
-		`{"MetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/-.mount","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"Metrics":{"cpu/limit":123456}}`,
+		`{"GeneralMetricsTimestamp":%s,"MetricsTags":{"namespace_id":"","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"test/metric/1","MetricsValue":{"value":123456}}`,
+		`{"GeneralMetricsTimestamp":%s,"MetricsTags":{"namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"removeme","MetricsValue":{"value":123456}}`,
+		`{"GeneralMetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/-.mount","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"/system.slice/-.mount//cpu/limit","MetricsValue":{"value":123456}}`,
+		`{"GeneralMetricsTimestamp":%s,"MetricsTags":{"container_name":"/system.slice/dbus.service","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"/system.slice/dbus.service//cpu/usage","MetricsValue":{"value":123456}}`,
+		`{"GeneralMetricsTimestamp":%s,"MetricsTags":{"namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"},"MetricsName":"test/metric/1","MetricsValue":{"value":123456}}`,
+		`{"CpuMetricsTimestamp":%s,"Metrics":{"cpu/limit":{"value":223456},"cpu/usage":{"value":123456}},"MetricsTags":{"container_name":"/system.slice/-.mount","namespace_id":"123","pod_id":"aaaa-bbbb-cccc-dddd"}}`,
 	}
 
 	msgsString := fmt.Sprintf("%s", FakeESSink.savedData)
-	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][0])
-	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][1])
-	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][2])
-	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][3])
-	fmt.Println(FakeESSink.savedData[string(core.MetricFamilyGeneral)][4])
 
 	for _, mgsTemplate := range expectMsgTemplate {
 		expectMsg := fmt.Sprintf(mgsTemplate, timeStr)

@@ -39,6 +39,9 @@ type ElasticSearchService struct {
 func (esConfig ElasticSearchService) Index(date time.Time) string {
 	return date.Format(fmt.Sprintf("%s-2006.01.02", esConfig.base_index))
 }
+func (esConfig ElasticSearchService) IndexAlias(date time.Time, typeName string) string {
+	return date.Format(fmt.Sprintf("%s-%s-2006.01.02", esConfig.base_index, typeName))
+}
 
 // SaveDataIntoES save metrics and events to ES by using ES client
 func (esSvc *ElasticSearchService) SaveData(date time.Time, typeName string, sinkData []interface{}) error {
@@ -61,6 +64,14 @@ func (esSvc *ElasticSearchService) SaveData(date time.Time, typeName string, sin
 		}
 		if !createIndex.Acknowledged {
 			return fmt.Errorf("Failed to create Index in ES cluster: %s", err)
+		}
+
+		createAlias, err := esSvc.EsClient.Alias().Add(indexName, esSvc.IndexAlias(date, typeName)).Do()
+		if err != nil {
+			return err
+		}
+		if !createAlias.Acknowledged {
+			return fmt.Errorf("Failed to create Index Alias in ES cluster: %s", err)
 		}
 	}
 
@@ -168,7 +179,7 @@ func CreateElasticSearchService(uri *url.URL) (*ElasticSearchService, error) {
 			return nil, fmt.Errorf("Failed to parse URL's bulkWorkers value into an int")
 		}
 	}
-	esSvc.bulkProcessor, err = esSvc.EsClient.BulkProcessor().Name("ElasticSearchWorker").Workers(bulkWorkers).Do()
+	esSvc.bulkProcessor, err = esSvc.EsClient.BulkProcessor().Name("ElasticSearchWorker").Workers(bulkWorkers).After(BulkAfterCB).Do()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to an ElasticSearch Bulk Processor: %v", err)
 	}
@@ -176,4 +187,20 @@ func CreateElasticSearchService(uri *url.URL) (*ElasticSearchService, error) {
 	glog.V(2).Infof("ElasticSearch sink configure successfully")
 
 	return &esSvc, nil
+}
+
+func BulkAfterCB(executionId int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+	if err != nil {
+		glog.Warningf("Failed to execute bulk operation to ElasticSearch: %v", err)
+	}
+
+	if response.Errors {
+		for _, list := range response.Items {
+			for name, itm := range list {
+				if itm.Error != nil {
+					glog.V(3).Infof("Failed to execute bulk operation to ElasticSearch on %s: %v", name, itm.Error)
+				}
+			}
+		}
+	}
 }

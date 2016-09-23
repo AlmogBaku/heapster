@@ -18,6 +18,9 @@ import (
 	"k8s.io/heapster/metrics/core"
 )
 
+func MetricFamilyTimestamp(metricFamily core.MetricFamily) string {
+	return strings.Title(string(metricFamily))+"MetricsTimestamp"
+}
 func metricFamilySchema(metricFamily core.MetricFamily) string {
 	metricSchemas := []string{}
 	for _, metric := range core.MetricFamilies[metricFamily] {
@@ -33,11 +36,16 @@ func metricFamilySchema(metricFamily core.MetricFamily) string {
 	}
 
 	return customMetricTypeSchema(string(metricFamily),
-		`"Metrics": {
+`"`+MetricFamilyTimestamp(metricFamily)+`": {
+  "type": "date",
+  "format": "strict_date_optional_time||epoch_millis"
+},
+"Metrics": {
   "properties": {
   `+strings.Join(metricSchemas, ",\r\n")+`
   }
-}`,
+}
+`,
 	)
 }
 
@@ -136,24 +144,12 @@ func customMetricTypeSchema(typeName string, customSchema string) string {
         }
       }
     },
-    "MetricsTimestamp": {
-      "type": "date",
-      "format": "strict_date_optional_time||epoch_millis"
-    },
     ` + customSchema + `
   }
 }`
 }
 
 var mapping = `{
-  "aliases": {
-    "heapster-cpu": {},
-    "heapster-filesystem": {},
-    "heapster-memory": {},
-    "heapster-network": {},
-    "heapster-general": {},
-    "heapster-events": {}
-  },
   "mappings": {
     ` + metricFamilySchema(core.MetricFamilyCpu) + `,
     ` + metricFamilySchema(core.MetricFamilyFilesystem) + `,
@@ -169,6 +165,10 @@ var mapping = `{
       "index": "not_analyzed"
     }
   }
+},
+"GeneralMetricsTimestamp": {
+"type": "date",
+"format": "strict_date_optional_time||epoch_millis"
 },
 "MetricsValue": {
   "properties": {

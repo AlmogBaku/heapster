@@ -36,20 +36,15 @@ type elasticSearchSink struct {
 
 type EsFamilyPoints map[core.MetricFamily][]interface{}
 type esPointTags map[string]string
+type customTimestamp map[string]time.Time
 
-type EsSinkPoint struct {
-	MetricsTimestamp time.Time
-	MetricsTags     esPointTags
-}
 type EsSinkPointGeneral struct {
-	EsSinkPoint
-	MetricsName  string
-	MetricsValue interface{}
+	GeneralMetricsTimestamp time.Time
+	MetricsTags             esPointTags
+	MetricsName             string
+	MetricsValue            interface{}
 }
-type EsSinkPointFamily struct {
-	EsSinkPoint
-	Metrics map[string]interface{}
-}
+type EsSinkPointFamily map[string]interface{}
 
 func (sink *elasticSearchSink) ExportData(dataBatch *core.DataBatch) {
 	sink.Lock()
@@ -92,11 +87,10 @@ func addMetric(points EsFamilyPoints, metricName string, date time.Time, tags es
 	if family == core.MetricFamilyGeneral {
 		point := EsSinkPointGeneral{}
 		point.MetricsTags = tags
-		point.MetricsTimestamp = date.UTC()
+		point.GeneralMetricsTimestamp = date.UTC()
 		point.MetricsName = metricName
-		point.MetricsValue = map[string]interface{}{
-			"value": value,
-		}
+		point.MetricsValue = EsPointValue(value)
+
 		//add
 		points[family] = append(points[family], point)
 		return points
@@ -104,8 +98,15 @@ func addMetric(points EsFamilyPoints, metricName string, date time.Time, tags es
 
 	for idx, pt := range points[family] {
 		if point, ok := pt.(EsSinkPointFamily); ok {
-			if point.MetricsTimestamp == date.UTC() && reflect.DeepEqual(point.MetricsTags, tags){
-				point.Metrics[metricName] = value
+			if point[esCommon.MetricFamilyTimestamp(family)] == date.UTC() && reflect.DeepEqual(point["MetricsTags"], tags) {
+				if metrics, ok := point["Metrics"].(map[string]interface{}); ok {
+					metrics[metricName] = EsPointValue(value)
+					point["Metrics"] = metrics
+				} else {
+					glog.Warningf("Failed to cast metrics to map")
+				}
+
+				//add
 				points[family][idx] = point
 				return points
 			}
@@ -113,14 +114,21 @@ func addMetric(points EsFamilyPoints, metricName string, date time.Time, tags es
 	}
 
 	point := EsSinkPointFamily{}
-	point.MetricsTimestamp = date.UTC()
-	point.MetricsTags = tags
-	point.Metrics = make(map[string]interface{})
-	point.Metrics[metricName] = value
+	point[esCommon.MetricFamilyTimestamp(family)] = date.UTC()
+	point["MetricsTags"] = tags
+	metrics := make(map[string]interface{})
+	metrics[metricName] = EsPointValue(value)
+	point["Metrics"] = metrics
+
 	//add
 	points[family] = append(points[family], point)
-
 	return points
+}
+
+func EsPointValue(value interface{}) interface{} {
+	return map[string]interface{}{
+		"value": value,
+	}
 }
 
 func (sink *elasticSearchSink) Name() string {
