@@ -175,7 +175,8 @@ var mapping = `{
         "type": "long"
       }
     }
-  }`) + `,
+  }
+}`) + `,
 
     "events": {
       "properties": {
