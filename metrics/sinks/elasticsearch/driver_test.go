@@ -155,12 +155,12 @@ func TestStoreMultipleDataInput(t *testing.T) {
 		MetricValues: map[string]core.MetricValue{
 			"cpu/usage": {
 				ValueType:  core.ValueInt64,
-				MetricType: core.MetricCumulative,
+				MetricType: core.MetricGauge,
 				IntValue:   123456,
 			},
 			"cpu/limit": {
 				ValueType:  core.ValueInt64,
-				MetricType: core.MetricCumulative,
+				MetricType: core.MetricGauge,
 				IntValue:   223456,
 			},
 		},
