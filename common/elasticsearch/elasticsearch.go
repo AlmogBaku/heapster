@@ -193,7 +193,7 @@ func CreateElasticSearchService(uri *url.URL) (*ElasticSearchService, error) {
 		Name("ElasticSearchWorker").
 		Workers(bulkWorkers).
 		After(bulkAfterCB).
-		Before().
+		Before(bulkBeforCB).
 		Do()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to an ElasticSearch Bulk Processor: %v", err)
