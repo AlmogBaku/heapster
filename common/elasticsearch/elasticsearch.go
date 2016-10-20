@@ -24,7 +24,6 @@ import (
 
 	"gopkg.in/olivere/elastic.v3"
 	"os"
-	"github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -193,7 +192,9 @@ func CreateElasticSearchService(uri *url.URL) (*ElasticSearchService, error) {
 		Name("ElasticSearchWorker").
 		Workers(bulkWorkers).
 		After(bulkAfterCB).
-		Before(bulkBeforCB).
+		BulkActions(1000).              // commit if # requests >= 1000
+		BulkSize(2 << 20).              // commit if size of requests >= 2 MB
+		FlushInterval(10*time.Second).  // commit every 10s
 		Do()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to an ElasticSearch Bulk Processor: %v", err)
@@ -218,7 +219,4 @@ func bulkAfterCB(executionId int64, requests []elastic.BulkableRequest, response
 			}
 		}
 	}
-}
-func bulkBeforCB(executionId int64, requests []elastic.BulkableRequest) {
-	spew.Dump(executionId,len(requests))
 }
