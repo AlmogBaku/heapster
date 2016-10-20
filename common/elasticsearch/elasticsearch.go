@@ -24,7 +24,7 @@ import (
 
 	"gopkg.in/olivere/elastic.v3"
 	"os"
-	"k8s.io/contrib/compare/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
+	"github.com/davecgh/go-spew/spew"
 )
 
 const (
