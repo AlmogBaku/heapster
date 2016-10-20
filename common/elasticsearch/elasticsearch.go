@@ -24,6 +24,7 @@ import (
 
 	"gopkg.in/olivere/elastic.v3"
 	"os"
+	"k8s.io/contrib/compare/Godeps/_workspace/src/github.com/davecgh/go-spew/spew"
 )
 
 const (
@@ -41,6 +42,10 @@ func (esConfig ElasticSearchService) Index(date time.Time) string {
 }
 func (esConfig ElasticSearchService) IndexAlias(date time.Time, typeName string) string {
 	return date.Format(fmt.Sprintf("%s-%s-2006.01.02", esConfig.base_index, typeName))
+}
+
+func (esSvc *ElasticSearchService) FlushData() error {
+	return esSvc.bulkProcessor.Flush()
 }
 
 // SaveDataIntoES save metrics and events to ES by using ES client
@@ -184,7 +189,12 @@ func CreateElasticSearchService(uri *url.URL) (*ElasticSearchService, error) {
 			return nil, fmt.Errorf("Failed to parse URL's bulkWorkers value into an int")
 		}
 	}
-	esSvc.bulkProcessor, err = esSvc.EsClient.BulkProcessor().Name("ElasticSearchWorker").Workers(bulkWorkers).After(BulkAfterCB).Do()
+	esSvc.bulkProcessor, err = esSvc.EsClient.BulkProcessor().
+		Name("ElasticSearchWorker").
+		Workers(bulkWorkers).
+		After(bulkAfterCB).
+		Before().
+		Do()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to an ElasticSearch Bulk Processor: %v", err)
 	}
@@ -194,7 +204,7 @@ func CreateElasticSearchService(uri *url.URL) (*ElasticSearchService, error) {
 	return &esSvc, nil
 }
 
-func BulkAfterCB(executionId int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+func bulkAfterCB(executionId int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
 		glog.Warningf("Failed to execute bulk operation to ElasticSearch: %v", err)
 	}
@@ -208,4 +218,7 @@ func BulkAfterCB(executionId int64, requests []elastic.BulkableRequest, response
 			}
 		}
 	}
+}
+func bulkBeforCB(executionId int64, requests []elastic.BulkableRequest) {
+	spew.Dump(executionId,len(requests))
 }

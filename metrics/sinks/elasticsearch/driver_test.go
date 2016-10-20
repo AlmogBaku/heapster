@@ -55,6 +55,7 @@ func NewFakeSink() fakeESSink {
 	return fakeESSink{
 		&elasticSearchSink{
 			saveData: SaveDataIntoES_Stub,
+			flushData: func() error { return nil; },
 			esSvc: esCommon.ElasticSearchService{
 				EsClient: &elastic.Client{},
 			},

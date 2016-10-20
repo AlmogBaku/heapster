@@ -38,6 +38,7 @@ type SaveDataFunc func(date time.Time, sinkData []interface{}) error
 type elasticSearchSink struct {
 	esSvc    esCommon.ElasticSearchService
 	saveData SaveDataFunc
+	flushData func() error
 	sync.RWMutex
 }
 
@@ -90,6 +91,7 @@ func (sink *elasticSearchSink) ExportEvents(eventBatch *event_core.EventBatch) {
 			glog.Warningf("Failed to export data to ElasticSearch sink: %v", err)
 		}
 	}
+	sink.flushData()
 }
 
 func (sink *elasticSearchSink) Name() string {
@@ -112,6 +114,10 @@ func NewElasticSearchSink(uri *url.URL) (event_core.EventSink, error) {
 	esSink.saveData = func(date time.Time, sinkData []interface{}) error {
 		return esSvc.SaveData(date, typeName, sinkData)
 	}
+	esSink.flushData = func() error {
+		return esSvc.FlushData()
+	}
+
 	glog.V(2).Info("ElasticSearch sink setup successfully")
 	return &esSink, nil
 }

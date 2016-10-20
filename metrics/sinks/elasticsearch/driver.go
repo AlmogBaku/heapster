@@ -31,6 +31,7 @@ type SaveDataFunc func(date time.Time, typeName string, sinkData []interface{}) 
 type elasticSearchSink struct {
 	esSvc    esCommon.ElasticSearchService
 	saveData SaveDataFunc
+	flushData func() error
 	sync.RWMutex
 }
 
@@ -151,6 +152,10 @@ func NewElasticSearchSink(uri *url.URL) (core.DataSink, error) {
 	esSink.saveData = func(date time.Time, typeName string, sinkData []interface{}) error {
 		return esSvc.SaveData(date, typeName, sinkData)
 	}
+	esSink.flushData = func() error {
+		return esSvc.FlushData()
+	}
+
 	glog.V(2).Info("ElasticSearch sink setup successfully")
 	return &esSink, nil
 }
